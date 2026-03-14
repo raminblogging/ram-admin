@@ -510,7 +510,7 @@ export default function AI() {
       )}
 
       {/* ── CHAT MESSAGES ────────────────────────── */}
-      <div className="ai-messages" style={{ flex: 1 }}>
+      <div className="ai-messages" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {messages.map((msg, i) => (
           <div key={msg.id || i} className={`ai-msg ${msg.role}`}>
             {msg.role === 'assistant' && (
