@@ -93,8 +93,12 @@ export const deleteSubscription    = (id)  => apiDelete(`/api/admin/subscription
 export const submitContact   = (data) => apiPost('/api/contact', data)
 export const submitSubscribe = (data) => apiPost('/api/subscribe', data)
 
-// AI Optimize (Gemini via worker)
-export const aiOptimize = (data) => apiPost('/api/admin/ai/optimize', data)
+// AI Memory
+export const fetchAiHistory  = (limit = 60)    => apiGet(`/api/ai/history?limit=${limit}`)
+export const saveAiMessage   = (role, content) => apiPost('/api/ai/message', { role, content })
+export const fetchAiMemory   = ()              => apiGet('/api/ai/memory')
+export const updateAiMemory  = (summary)       => apiPut('/api/ai/memory', { summary })
+export const clearAiHistory  = ()              => apiDelete('/api/ai/history')
 
 // ═══════════════════════════════════════════════════════
 //  DATE / TIME HELPERS
