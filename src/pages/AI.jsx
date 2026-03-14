@@ -220,6 +220,23 @@ export default function AI() {
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
 
+  // ── LOCK page-content to flex so AI chat fills height ──
+  useEffect(() => {
+    const el = document.querySelector('.page-content')
+    if (!el) return
+    const prev = { overflow: el.style.overflow, display: el.style.display, flexDirection: el.style.flexDirection, padding: el.style.paddingBottom }
+    el.style.overflow = 'hidden'
+    el.style.display = 'flex'
+    el.style.flexDirection = 'column'
+    el.style.paddingBottom = '0'
+    return () => {
+      el.style.overflow = prev.overflow
+      el.style.display = prev.display
+      el.style.flexDirection = prev.flexDirection
+      el.style.paddingBottom = prev.padding
+    }
+  }, [])
+
   // ── LOAD HISTORY & MEMORY FROM DB ON MOUNT ────────
   useEffect(() => {
     async function loadFromDB() {
@@ -412,7 +429,7 @@ export default function AI() {
   if (initialLoad) return <Spinner />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
       <PageHeader
         title="Ramai AI 🤖"
@@ -510,7 +527,7 @@ export default function AI() {
       )}
 
       {/* ── CHAT MESSAGES ────────────────────────── */}
-      <div className="ai-messages" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      <div className="ai-messages" style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: 8 }}>
         {messages.map((msg, i) => (
           <div key={msg.id || i} className={`ai-msg ${msg.role}`}>
             {msg.role === 'assistant' && (
@@ -554,7 +571,7 @@ export default function AI() {
       </div>
 
       {/* ── INPUT ────────────────────────────────── */}
-      <div className="ai-input-row">
+      <div className="ai-input-row" style={{ flexShrink: 0 }}>
         <input
           ref={inputRef}
           className="inp flex-1"
