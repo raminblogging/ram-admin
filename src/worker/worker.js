@@ -27,6 +27,12 @@
  *
  *  POST   /api/admin/ai/optimize
  *
+ *  GET    /api/ai/history          — last N ai_messages + memory summary
+ *  POST   /api/ai/message          — save a message to ai_messages
+ *  GET    /api/ai/memory           — get the memory summary
+ *  PUT    /api/ai/memory           — update the memory summary
+ *  DELETE /api/ai/history          — clear all ai_messages
+ *
  *  GET    /api/personal/tasks
  *  POST   /api/personal/tasks
  *  PUT    /api/personal/tasks/:id
@@ -46,6 +52,16 @@
  *  POST   /api/personal/categories
  *  PUT    /api/personal/categories/:id
  *  DELETE /api/personal/categories/:id
+ *
+ *  GET    /api/personal/habits
+ *  POST   /api/personal/habits
+ *  PUT    /api/personal/habits/:id
+ *  DELETE /api/personal/habits/:id
+ *
+ *  GET    /api/personal/ideas
+ *  POST   /api/personal/ideas
+ *  PUT    /api/personal/ideas/:id
+ *  DELETE /api/personal/ideas/:id
  *
  *  Public (no auth):
  *  POST   /api/contact
@@ -200,6 +216,13 @@ export default {
     // AI Optimize
     if (path === '/api/admin/ai/optimize' && request.method === 'POST') return aiOptimize(request, env);
 
+    // AI Memory — conversation history + long-term memory
+    if (path === '/api/ai/history'  && request.method === 'GET')    return getAiHistory(request, env);
+    if (path === '/api/ai/message'  && request.method === 'POST')   return saveAiMessage(request, env);
+    if (path === '/api/ai/memory'   && request.method === 'GET')    return getAiMemory(env);
+    if (path === '/api/ai/memory'   && request.method === 'PUT')    return updateAiMemory(request, env);
+    if (path === '/api/ai/history'  && request.method === 'DELETE') return clearAiHistory(env);
+
     // ─────────────────────────────────────────────────────
     //  PERSONAL ROUTES
     // ─────────────────────────────────────────────────────
@@ -209,6 +232,8 @@ export default {
       { prefix: '/api/personal/notes',      table: 'notes' },
       { prefix: '/api/personal/events',     table: 'events' },
       { prefix: '/api/personal/categories', table: 'categories' },
+      { prefix: '/api/personal/habits',     table: 'habits' },
+      { prefix: '/api/personal/ideas',      table: 'ideas' },
     ];
 
     for (const { prefix, table } of personal) {
@@ -587,6 +612,84 @@ async function handleSubscribe(request, env) {
       'INSERT INTO subscriptions (id, email, name, read, created_at) VALUES (?, ?, ?, 0, ?)'
     ).bind(id, email, name || '', now).run();
     return json({ success: true, id }, 201);
+  } catch(e) { return err('DB error: ' + e.message, 500); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI MEMORY — conversation history + long-term summary
+// ═══════════════════════════════════════════════════════
+
+// GET /api/ai/history?limit=40
+// Returns last N messages newest-first + the memory summary
+async function getAiHistory(request, env) {
+  try {
+    const url    = new URL(request.url);
+    const limit  = Math.min(parseInt(url.searchParams.get('limit') || '60'), 200);
+    const { results } = await env.DB.prepare(
+      'SELECT id, role, content, created_at FROM ai_messages ORDER BY created_at DESC LIMIT ?'
+    ).bind(limit).all();
+    // Return oldest-first so the AI gets proper conversation order
+    const messages = results.reverse().map(r => ({
+      id: r.id, role: r.role, content: r.content, createdAt: r.created_at,
+    }));
+    const memRow = await env.DB.prepare('SELECT summary, updated_at FROM ai_memory WHERE id = ?').bind('singleton').first();
+    return json({ messages, memory: memRow?.summary || '', memoryUpdatedAt: memRow?.updated_at || null });
+  } catch(e) { return err('DB error: ' + e.message, 500); }
+}
+
+// POST /api/ai/message  { role, content }
+async function saveAiMessage(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return err('Invalid JSON'); }
+  const { role, content } = body || {};
+  if (!role || !content) return err('role and content required');
+  if (!['user', 'assistant'].includes(role)) return err('role must be user or assistant');
+  const id  = newId();
+  const now = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      'INSERT INTO ai_messages (id, role, content, created_at) VALUES (?, ?, ?, ?)'
+    ).bind(id, role, content, now).run();
+    // Keep only the last 200 messages to prevent unbounded growth
+    await env.DB.prepare(
+      `DELETE FROM ai_messages WHERE id NOT IN (
+        SELECT id FROM ai_messages ORDER BY created_at DESC LIMIT 200
+      )`
+    ).run();
+    return json({ id, role, content, createdAt: now }, 201);
+  } catch(e) { return err('DB error: ' + e.message, 500); }
+}
+
+// GET /api/ai/memory
+async function getAiMemory(env) {
+  try {
+    const row = await env.DB.prepare('SELECT summary, updated_at FROM ai_memory WHERE id = ?').bind('singleton').first();
+    return json({ summary: row?.summary || '', updatedAt: row?.updated_at || null });
+  } catch(e) { return err('DB error: ' + e.message, 500); }
+}
+
+// PUT /api/ai/memory  { summary }
+// Called after conversations to update the long-term memory summary
+async function updateAiMemory(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return err('Invalid JSON'); }
+  const { summary } = body || {};
+  if (typeof summary !== 'string') return err('summary string required');
+  const now = new Date().toISOString();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO ai_memory (id, summary, updated_at) VALUES ('singleton', ?, ?)
+       ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at`
+    ).bind(summary, now).run();
+    return json({ updated: true, updatedAt: now });
+  } catch(e) { return err('DB error: ' + e.message, 500); }
+}
+
+// DELETE /api/ai/history — clear all messages (keep memory summary)
+async function clearAiHistory(env) {
+  try {
+    await env.DB.prepare('DELETE FROM ai_messages').run();
+    return json({ cleared: true });
   } catch(e) { return err('DB error: ' + e.message, 500); }
 }
 
