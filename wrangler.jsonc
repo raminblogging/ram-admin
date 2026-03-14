@@ -1,0 +1,60 @@
+# ── ramsrinivasan-api Worker ────────────────────────────────────────────────
+# Updated Cloudflare Worker configuration with correct database bindings
+#
+# Deploy command (from repo root):
+#   wrangler deploy
+#
+# First-time DB setup:
+#   wrangler d1 execute ramsrinivasan-db --remote --file=src/schema.sql
+#
+# Set secrets (run once, never commit these):
+#   wrangler secret put JWT_SECRET      --env production
+#   wrangler secret put ADMIN_EMAIL     --env production
+#   wrangler secret put ADMIN_PASSWORD  --env production
+
+name            = "ramsrinivasan-api"
+main            = "src/index.js"
+compatibility_date  = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ── D1 Database ──────────────────────────────────────────────────────────────
+# Production database ID: 56eabc71-43cd-4850-b4d0-b08eb588f275
+[[d1_databases]]
+binding       = "DB"
+database_name = "ramsrinivasan-db"
+database_id   = "56eabc71-43cd-4850-b4d0-b08eb588f275"
+
+# ── KV Store (for personal data: tasks, notes, events, categories) ───────────
+# Make sure this is created and linked in Cloudflare dashboard
+# [[kv_namespaces]]
+# binding = "PERSONAL"
+# id = "c8e49a1dd3f448bf8b74d9a20c6f27f8"
+
+# ── Custom routes ────────────────────────────────────────────────────────────
+# Routes all /api/* requests on ramsrinivasan.in to this worker
+# This ensures CORS works properly with your domain
+#
+[[routes]]
+pattern    = "ramsrinivasan.in/api/*"
+zone_name  = "ramsrinivasan.in"
+
+[[routes]]
+pattern    = "www.ramsrinivasan.in/api/*"
+zone_name  = "ramsrinivasan.in"
+
+# ── Secrets (set via CLI, not stored here) ───────────────────────────────────
+# These must be set using the wrangler CLI:
+#
+# JWT_SECRET     — Random string (generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+# ADMIN_EMAIL    — Your admin email (e.g., admin@ramsrinivasan.in)
+# ADMIN_PASSWORD — Your admin password (create a strong one)
+#
+# Example secret setup commands:
+#   wrangler secret put JWT_SECRET --env production
+#   # Then paste: (random 32-byte hex string)
+#
+#   wrangler secret put ADMIN_EMAIL --env production
+#   # Then paste: admin@ramsrinivasan.in
+#
+#   wrangler secret put ADMIN_PASSWORD --env production
+#   # Then paste: (your secure password)
